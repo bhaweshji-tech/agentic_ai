@@ -1,7 +1,32 @@
 // Virtual Stock Trading Simulator - Frontend Controller
 
-const API_BASE = window.location.protocol + "//" + window.location.host;
-const WS_BASE = (window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host;
+const isGitHubPages = window.location.hostname.includes("github.io");
+const API_BASE = isGitHubPages ? "http://localhost:8000" : (window.location.protocol + "//" + window.location.host);
+const WS_BASE = isGitHubPages ? "ws://localhost:8000" : ((window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host);
+
+// Firebase Configuration - Put your Firebase Credentials from console here!
+// By default, if credentials are unchanged, it falls back to sandbox mock sign-in.
+const firebaseConfig = {
+    apiKey: "AIzaSyFakeKeyPlaceholderForLocalRuns",
+    authDomain: "tradesim-placeholder.firebaseapp.com",
+    projectId: "tradesim-placeholder",
+    storageBucket: "tradesim-placeholder.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:abcdef123456"
+};
+
+// Check if user has initialized Firebase
+let firebaseAuth = null;
+try {
+    if (typeof firebase !== 'undefined') {
+        if (firebase.apps.length === 0) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        firebaseAuth = firebase.auth();
+    }
+} catch (e) {
+    console.warn("Firebase Auth failed to load. Running in simulated fallback mode.", e);
+}
 
 // Application State
 let state = {
@@ -75,12 +100,38 @@ function verifySession() {
         });
 }
 
+function syncUserProfile(uid, email) {
+    const errorAlert = document.getElementById("auth-error-alert");
+    errorAlert.classList.add("hidden");
+    
+    fetch(`${API_BASE}/api/auth/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: uid, email: email })
+    })
+    .then(async res => {
+        const data = await res.json();
+        if (res.status === 200) {
+            localStorage.setItem("sim_token", data.access_token);
+            state.token = data.access_token;
+            verifySession();
+        } else {
+            errorAlert.innerText = data.detail || "Profile synchronization error.";
+            errorAlert.classList.remove("hidden");
+        }
+    })
+    .catch(() => {
+        errorAlert.innerText = "Failed to synchronize profile session with backend server.";
+        errorAlert.classList.remove("hidden");
+    });
+}
+
 function setupDashboardHeader() {
     document.getElementById("header-user-email").innerText = state.user.email;
     document.getElementById("header-user-balance").innerText = `Rs. ${state.user.virtual_balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
     
     // Admin Toggle
-    if (state.user.email === "admin@gmail.com") {
+    if (state.user.email === "bhaweshji@gmail.com") {
         document.getElementById("admin-indicator").classList.remove("hidden");
         document.getElementById("btn-admin-panel").classList.remove("hidden");
     } else {
@@ -164,6 +215,35 @@ function setupEventListeners() {
             errorAlert.innerText = "Server connection lost. Try again later.";
             errorAlert.classList.remove("hidden");
         });
+    });
+    
+    // Google OAuth Sign-In via Firebase
+    document.getElementById("btn-google-login").addEventListener("click", () => {
+        const errorAlert = document.getElementById("auth-error-alert");
+        errorAlert.classList.add("hidden");
+
+        const hasValidConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("FakeKeyPlaceholder");
+        
+        if (firebaseAuth && hasValidConfig) {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebaseAuth.signInWithPopup(provider)
+                .then((result) => {
+                    const user = result.user;
+                    syncUserProfile(user.uid, user.email);
+                })
+                .catch((error) => {
+                    errorAlert.innerText = error.message || "Google Sign-In failed.";
+                    errorAlert.classList.remove("hidden");
+                });
+        } else {
+            // Out-of-the-box simulated fallback for instant developer evaluation
+            const mockEmail = prompt("Simulating Google login sandbox popup!\nEnter your Google email address:", "bhaweshji@gmail.com");
+            if (mockEmail && mockEmail.trim() !== "") {
+                const cleanEmail = mockEmail.trim();
+                const mockUid = "mock-uid-" + cleanEmail.replace(/[^a-zA-Z0-9]/g, "");
+                syncUserProfile(mockUid, cleanEmail);
+            }
+        }
     });
     
     // Logout trigger
@@ -859,7 +939,7 @@ function openAdminPanel() {
             users.forEach(u => {
                 const isBlockedChecked = u.is_blocked ? "checked" : "";
                 const dateStr = u.last_active ? new Date(u.last_active).toLocaleString() : "Never";
-                const isSelfAdmin = u.email === "admin@gmail.com";
+                const isSelfAdmin = u.email === "bhaweshji@gmail.com";
                 const disabledStr = isSelfAdmin ? "disabled cursor-not-allowed" : "";
                 
                 const tr = document.createElement("tr");

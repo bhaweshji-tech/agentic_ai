@@ -32,9 +32,17 @@ else:
 
 app = FastAPI(title="Virtual Stock Trading Simulator API")
 
+# Allow CORS origins for both localhost and GitHub Pages deployment
+allowed_origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:5500",
+    "https://bhaweshji-tech.github.io"
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -251,7 +259,7 @@ async def register(user: UserRegister, db: AsyncSession = Depends(get_db)):
     await db.commit()
     
     # Generate Token
-    is_admin = (user.email == "admin@gmail.com")
+    is_admin = (user.email == "bhaweshji@gmail.com")
     token_data = {"sub": user.email, "id": user_id, "is_admin": is_admin}
     token = jwt.encode(token_data, JWT_SECRET, algorithm=ALGORITHM)
     
@@ -276,7 +284,7 @@ async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
     db.add(log)
     await db.commit()
     
-    is_admin = (db_user.email == "admin@gmail.com")
+    is_admin = (db_user.email == "bhaweshji@gmail.com")
     token_data = {"sub": db_user.email, "id": db_user.id, "is_admin": is_admin}
     token = jwt.encode(token_data, JWT_SECRET, algorithm=ALGORITHM)
     
@@ -312,7 +320,7 @@ async def sync_supabase_user(payload: UserSync, db: AsyncSession = Depends(get_d
         db.add(log)
         await db.commit()
         
-    is_admin = (db_user.email == "admin@gmail.com")
+    is_admin = (db_user.email == "bhaweshji@gmail.com")
     token_data = {"sub": db_user.email, "id": db_user.id, "is_admin": is_admin}
     token = jwt.encode(token_data, JWT_SECRET, algorithm=ALGORITHM)
     
@@ -627,7 +635,7 @@ async def get_report_data(token: str = Query(...), db: AsyncSession = Depends(ge
 
 def verify_admin(token: str) -> None:
     payload = get_current_user(token)
-    if not payload.get("is_admin") or payload.get("sub") != "admin@gmail.com":
+    if not payload.get("is_admin") or payload.get("sub") != "bhaweshji@gmail.com":
         raise HTTPException(status_code=403, detail="Access denied. Administrators only.")
 
 @app.get("/api/admin/users")
@@ -657,7 +665,7 @@ async def admin_toggle_block(user_id: str, is_blocked: bool, token: str = Query(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    if user.email == "admin@gmail.com":
+    if user.email == "bhaweshji@gmail.com":
         raise HTTPException(status_code=400, detail="Cannot block the main admin account")
         
     user.is_blocked = is_blocked

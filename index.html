@@ -34,6 +34,9 @@
             }
         }
     </script>
+    <!-- Firebase SDK (Compat Version for Vanilla JS) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 </head>
 <body class="bg-darkBg text-gray-100 font-sans min-h-screen">
     <!-- Authentication Panel (Login/Signup) -->
@@ -48,6 +51,18 @@
             
             <h2 class="text-2xl font-bold text-center mb-2" id="auth-title">Welcome back</h2>
             <p class="text-xs text-gray-400 text-center mb-6">Virtual stock trading with real-time feedback loops.</p>
+
+            <!-- Google OAuth Sign-In -->
+            <button type="button" id="btn-google-login" class="w-full bg-[#121b2d] hover:bg-[#1e2d4a] border border-borderBlur text-white font-semibold py-2.5 rounded-lg text-sm flex items-center justify-center gap-2.5 transition-all mb-4 hover:border-gray-500 hover:shadow-lg shadow-blue-500/5">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.529-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.245-3.125C18.29 1.926 15.485 1 12.24 1 6.033 1 1 6.033 1 12.24s5.033 11.24 11.24 11.24c6.478 0 10.793-4.537 10.793-10.985 0-.74-.08-1.305-.18-1.865h-10.613z"/></svg>
+                Sign In with Google
+            </button>
+            
+            <div class="flex items-center gap-3 my-5 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
+                <div class="h-px bg-borderBlur flex-1"></div>
+                <span>or use email credentials</span>
+                <div class="h-px bg-borderBlur flex-1"></div>
+            </div>
 
             <form id="auth-form" class="space-y-4">
                 <div>
