@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinOps.ai | Cloud Cost Optimization Dashboard</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <span class="logo-icon">▲</span>
+                    <span class="logo-text">FinOps<span class="highlight">.ai</span></span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="active" id="nav-dashboard-li">
+                        <a href="#" id="nav-dashboard">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li id="nav-opportunities-li">
+                        <a href="#" id="nav-opportunities">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg>
+                            Opportunities
+                            <span class="badge badge-accent" id="opportunities-count-badge">0</span>
+                        </a>
+                    </li>
+                    <li id="nav-accounts-li">
+                        <a href="#" id="nav-accounts">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                            Cloud Accounts
+                        </a>
+                    </li>
+                    <li id="nav-policies-li">
+                        <a href="#" id="nav-policies">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                            Governance
+                        </a>
+                    </li>
+                    <li id="nav-settings-li">
+                        <a href="#" id="nav-settings">
+                            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                            Settings
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Sidebar Banner / Mini Dashboard -->
+            <div class="sidebar-banner">
+                <div class="banner-glow"></div>
+                <h4>Savings Simulator</h4>
+                <p>Select optimization items below to calculate active monthly savings in real time.</p>
+                <div class="simulation-stat">
+                    <span class="label">Simulated Savings</span>
+                    <span class="val" id="banner-savings-value">$0/mo</span>
+                </div>
+                <button class="btn btn-primary btn-block btn-pulse" id="banner-apply-btn" disabled>
+                    Apply Optimizations
+                </button>
+            </div>
+            
+            <div class="sidebar-footer">
+                <span class="user-avatar">JD</span>
+                <div class="user-info">
+                    <span class="user-name">John Doe</span>
+                    <span class="user-role">Cloud Cost Owner</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Dashboard Area -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="content-header">
+                <div class="header-title-container">
+                    <h1>FinOps Optimization Dashboard</h1>
+                    <p class="subtitle">Analyze, simulate, and resolve cloud cost inefficiencies in real time.</p>
+                </div>
+                <div class="header-actions">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="global-search" placeholder="Search Resource ID, Instance Type, Tag...">
+                    </div>
+                    <div class="notification-trigger">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span class="notif-dot"></span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div class="dashboard-view" id="dashboard-tab-content">
+                <!-- KPI Section -->
+                <section class="kpi-grid">
+                    <!-- KPI 1 -->
+                    <div class="card kpi-card">
+                        <div class="kpi-icon-wrapper color-blue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Total Monthly Spend</span>
+                            <span class="kpi-value" id="kpi-total-spend">$84,320</span>
+                            <span class="kpi-trend trend-up">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                                2.4% MoM
+                            </span>
+                        </div>
+                    </div>
+                    <!-- KPI 2 -->
+                    <div class="card kpi-card highlight-glow">
+                        <div class="kpi-icon-wrapper color-teal">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Potential Monthly Savings</span>
+                            <span class="kpi-value color-teal" id="kpi-potential-savings">$15,870</span>
+                            <span class="kpi-trend trend-neutral">
+                                Simulated: <span id="kpi-simulated-savings" class="weight-bold">$0</span>
+                            </span>
+                        </div>
+                    </div>
+                    <!-- KPI 3 -->
+                    <div class="card kpi-card">
+                        <div class="kpi-icon-wrapper color-orange">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Active Opportunities</span>
+                            <span class="kpi-value" id="kpi-active-opps">14</span>
+                            <span class="kpi-trend trend-down-good">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+                                3 resolved this week
+                            </span>
+                        </div>
+                    </div>
+                    <!-- KPI 4 -->
+                    <div class="card kpi-card">
+                        <div class="kpi-icon-wrapper color-purple">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </div>
+                        <div class="kpi-data">
+                            <span class="kpi-label">Avg. Efficiency Score</span>
+                            <span class="kpi-value" id="kpi-efficiency-score">78%</span>
+                            <span class="kpi-trend trend-up">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                                +4.1% MoM
+                            </span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chart & Score Section -->
+                <section class="visuals-grid">
+                    <!-- Chart Card -->
+                    <div class="card chart-card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3>Cloud Cost Trend & Forecasting</h3>
+                                <p class="card-subtitle">Projected monthly run rate: standard vs. optimized path</p>
+                            </div>
+                            <div class="chart-legend">
+                                <span class="legend-item"><span class="legend-dot color-blue"></span>Current Path</span>
+                                <span class="legend-item"><span class="legend-dot color-teal"></span>Optimized Path</span>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="cost-trend-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Optimization Breakdown Card -->
+                    <div class="card breakdown-card">
+                        <div class="card-header">
+                            <h3>Efficiency Breakdown</h3>
+                            <p class="card-subtitle">Cloud resources configuration rating</p>
+                        </div>
+                        <div class="breakdown-content">
+                            <div class="circular-score-container">
+                                <div class="score-circle" id="score-circle-element">
+                                    <svg viewBox="0 0 36 36" class="circular-chart purple">
+                                        <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="circle" stroke-dasharray="78, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" id="circle-score-path" />
+                                    </svg>
+                                    <div class="score-text">
+                                        <span class="number" id="score-percent">78</span>
+                                        <span class="percent">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="breakdown-list">
+                                <div class="breakdown-item">
+                                    <div class="item-label">
+                                        <span>Compute (EC2/VMs)</span>
+                                        <span id="compute-breakdown-val">64%</span>
+                                    </div>
+                                    <div class="progress-bar"><div class="progress progress-warning" id="compute-breakdown-bar" style="width: 64%"></div></div>
+                                </div>
+                                <div class="breakdown-item">
+                                    <div class="item-label">
+                                        <span>Storage (EBS/S3)</span>
+                                        <span id="storage-breakdown-val">88%</span>
+                                    </div>
+                                    <div class="progress-bar"><div class="progress progress-success" id="storage-breakdown-bar" style="width: 88%"></div></div>
+                                </div>
+                                <div class="breakdown-item">
+                                    <div class="item-label">
+                                        <span>Database (RDS/SQL)</span>
+                                        <span id="db-breakdown-val">75%</span>
+                                    </div>
+                                    <div class="progress-bar"><div class="progress progress-success" id="db-breakdown-bar" style="width: 75%"></div></div>
+                                </div>
+                                <div class="breakdown-item">
+                                    <div class="item-label">
+                                        <span>Unused Resources</span>
+                                        <span id="unused-breakdown-val">40%</span>
+                                    </div>
+                                    <div class="progress-bar"><div class="progress progress-danger" id="unused-breakdown-bar" style="width: 40%"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Opportunities List Section -->
+                <section class="opportunities-section">
+                    <div class="section-header-filters">
+                        <div class="section-title-group">
+                            <h2>Optimization Opportunities</h2>
+                            <p class="subtitle" id="filtered-stats">Loading opportunities...</p>
+                        </div>
+                        
+                        <!-- Filters Panel -->
+                        <div class="filters-panel">
+                            <!-- Cloud Filter -->
+                            <div class="filter-group">
+                                <label>Provider</label>
+                                <select id="filter-provider" class="select-filter">
+                                    <option value="all">All Providers</option>
+                                    <option value="AWS">AWS</option>
+                                    <option value="Azure">Azure</option>
+                                    <option value="GCP">Google Cloud</option>
+                                </select>
+                            </div>
+                            <!-- Category Filter -->
+                            <div class="filter-group">
+                                <label>Category</label>
+                                <select id="filter-category" class="select-filter">
+                                    <option value="all">All Categories</option>
+                                    <option value="compute">Compute Right-sizing</option>
+                                    <option value="storage">Storage Cleanup</option>
+                                    <option value="idle">Idle Resources</option>
+                                    <option value="ri">Commitment Coverages</option>
+                                </select>
+                            </div>
+                            <!-- Impact Filter -->
+                            <div class="filter-group">
+                                <label>Impact</label>
+                                <select id="filter-impact" class="select-filter">
+                                    <option value="all">All Impacts</option>
+                                    <option value="High">High (>$1,000/mo)</option>
+                                    <option value="Medium">Medium ($200-$1,000/mo)</option>
+                                    <option value="Low">Low (<$200/mo)</option>
+                                </select>
+                            </div>
+                            <!-- Reset Button -->
+                            <button class="btn btn-secondary btn-icon-only" id="btn-reset-filters" title="Reset Filters">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Bulk Actions Bar -->
+                    <div class="bulk-actions-bar" id="bulk-bar">
+                        <div class="bulk-info">
+                            <span class="checked-count" id="checked-count">0 items selected</span>
+                            <span class="divider">|</span>
+                            <span class="savings-preview">Potential Simulated Savings: <strong class="color-teal" id="simulated-savings-amount">$0/mo</strong></span>
+                        </div>
+                        <div class="bulk-buttons">
+                            <button class="btn btn-secondary btn-sm" id="btn-select-all-filtered">Select All</button>
+                            <button class="btn btn-secondary btn-sm" id="btn-clear-selection">Clear Selection</button>
+                            <button class="btn btn-primary btn-sm" id="btn-apply-selected-bulk">Simulate Applying</button>
+                        </div>
+                    </div>
+
+                    <!-- Opportunities Table Card -->
+                    <div class="card table-card">
+                        <div class="table-scroll-container">
+                            <table class="opportunities-table" id="opps-table">
+                                <thead>
+                                    <tr>
+                                        <th class="col-checkbox">
+                                            <input type="checkbox" id="header-checkbox">
+                                        </th>
+                                        <th class="col-resource">Resource & ID</th>
+                                        <th class="col-provider">Cloud</th>
+                                        <th class="col-category">Category</th>
+                                        <th class="col-current">Current Config</th>
+                                        <th class="col-recommended">Recommended Config</th>
+                                        <th class="col-savings text-right">Est. Monthly Savings</th>
+                                        <th class="col-impact">Impact</th>
+                                        <th class="col-actions"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="opps-table-body">
+                                    <!-- Dynamic Rows Inserted Here -->
+                                </tbody>
+                            </table>
+                            
+                            <!-- Empty State -->
+                            <div class="empty-state" id="table-empty-state" style="display: none;">
+                                <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                <h3>No opportunities found</h3>
+                                <p>Try adjusting your search criteria or filters.</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            
+            <!-- Other Tab Views (Empty state fallback styles) -->
+            <div class="dashboard-view" id="accounts-tab-content" style="display: none;">
+                <div class="card tab-empty-card">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+                    <h2>Cloud Accounts Integration</h2>
+                    <p>Connect your cloud subscriptions and configure ingestion intervals.</p>
+                    <div class="account-grid">
+                        <div class="account-card-mini">
+                            <span class="provider-logo aws-logo">AWS</span>
+                            <div class="account-details-mini">
+                                <strong>AWS Core Production</strong>
+                                <span>ID: 8847-2913-4122</span>
+                            </div>
+                            <span class="status-indicator active">Connected</span>
+                        </div>
+                        <div class="account-card-mini">
+                            <span class="provider-logo azure-logo">Azure</span>
+                            <div class="account-details-mini">
+                                <strong>Azure Sandbox</strong>
+                                <span>ID: sub_az_99018c</span>
+                            </div>
+                            <span class="status-indicator active">Connected</span>
+                        </div>
+                        <div class="account-card-mini">
+                            <span class="provider-logo gcp-logo">GCP</span>
+                            <div class="account-details-mini">
+                                <strong>GCP BigData Compute</strong>
+                                <span>ID: prj-gcp-bi-prod</span>
+                            </div>
+                            <span class="status-indicator active">Connected</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="dashboard-view" id="policies-tab-content" style="display: none;">
+                <div class="card tab-empty-card">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    <h2>Governance Rules & Guardrails</h2>
+                    <p>Enforce automated rules like cleaning up unattached disks older than 14 days, or downsizing instances idle for 30+ days.</p>
+                    <div class="governance-rules-list">
+                        <div class="rule-row">
+                            <div class="rule-meta">
+                                <strong>Auto-Shutdown Non-Prod VMs</strong>
+                                <span>Shut down AWS/Azure VMs tagged 'env:sandbox' during weekends (6 PM Fri - 6 AM Mon).</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" checked disabled>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div class="rule-row">
+                            <div class="rule-meta">
+                                <strong>Unattached Volume Alert & Clean</strong>
+                                <span>Identify unattached SSD blocks. Automatically delete if unattached for >30 days.</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" checked disabled>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                        <div class="rule-row">
+                            <div class="rule-meta">
+                                <strong>Automated Instance Right-Sizing Alerts</strong>
+                                <span>Create Slack alert when compute utilization remains <5% average for a 7-day period.</span>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" disabled>
+                                <span class="slider round"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="dashboard-view" id="settings-tab-content" style="display: none;">
+                <div class="card tab-empty-card">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    <h2>Dashboard Settings</h2>
+                    <p>Adjust thresholds, notifications, currency, and ingestion settings.</p>
+                    <div class="settings-form-mini">
+                        <div class="settings-field">
+                            <label>Default Currency</label>
+                            <select disabled><option>USD ($)</option><option>EUR (€)</option></select>
+                        </div>
+                        <div class="settings-field">
+                            <label>Right-sizing Threshold (CPU Average)</label>
+                            <input type="text" value="10%" disabled>
+                        </div>
+                        <div class="settings-field">
+                            <label>Slack Notifications webhook</label>
+                            <input type="text" value="https://hooks.slack.com/services/T00..." disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Optimization Detail Drawer -->
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+    <div class="detail-drawer" id="detail-drawer">
+        <div class="drawer-header">
+            <div class="drawer-header-left">
+                <span class="provider-badge-large" id="drawer-provider-badge">AWS</span>
+                <div>
+                    <h3 id="drawer-title">Right-size EC2 Instance</h3>
+                    <p id="drawer-resource-id">i-0a86bf5c8d0e1aa2</p>
+                </div>
+            </div>
+            <button class="btn-close-drawer" id="btn-close-drawer">&times;</button>
+        </div>
+        <div class="drawer-body" id="drawer-body-content">
+            <!-- Dynamic Drawer Content goes here -->
+        </div>
+    </div>
+
+    <!-- Simulation Success Modal -->
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="success-modal" id="success-modal">
+        <div class="modal-glow"></div>
+        <div class="modal-body">
+            <div class="success-icon-container">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="checkmark-icon"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <h2>Optimizations Applied!</h2>
+            <p>Your simulated cloud environment has been updated. You've resolved inefficiencies and saved:</p>
+            <div class="applied-savings-value" id="applied-savings-value">$0/mo</div>
+            <p class="modal-info-text">In a live setting, this trigger would issue API actions to resize instances, delete orphaned volumes, and purchase recommended reserved structures via your CI/CD or IaC workflows.</p>
+            <button class="btn btn-primary" id="btn-close-modal">Back to Dashboard</button>
+        </div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
