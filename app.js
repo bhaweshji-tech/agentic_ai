@@ -58,7 +58,30 @@ function initApp() {
     setupEventListeners();
     initCountdownTimer();
     
-    // Check if token exists
+    // Handle Firebase redirect results on page load
+    const hasValidConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("FakeKeyPlaceholder");
+    if (firebaseAuth && hasValidConfig) {
+        firebaseAuth.getRedirectResult()
+            .then((result) => {
+                if (result && result.user) {
+                    syncUserProfile(result.user.uid, result.user.email);
+                    return;
+                }
+                checkTokenAndSession();
+            })
+            .catch((error) => {
+                console.error("Firebase redirect login error: ", error);
+                const errorAlert = document.getElementById("auth-error-alert");
+                errorAlert.innerText = error.message || "Google Sign-In failed.";
+                errorAlert.classList.remove("hidden");
+                checkTokenAndSession();
+            });
+    } else {
+        checkTokenAndSession();
+    }
+}
+
+function checkTokenAndSession() {
     if (state.token) {
         verifySession();
     } else {
@@ -237,15 +260,7 @@ function setupEventListeners() {
         
         if (firebaseAuth && hasValidConfig) {
             const provider = new firebase.auth.GoogleAuthProvider();
-            firebaseAuth.signInWithPopup(provider)
-                .then((result) => {
-                    const user = result.user;
-                    syncUserProfile(user.uid, user.email);
-                })
-                .catch((error) => {
-                    errorAlert.innerText = error.message || "Google Sign-In failed.";
-                    errorAlert.classList.remove("hidden");
-                });
+            firebaseAuth.signInWithRedirect(provider);
         } else {
             // Out-of-the-box simulated fallback for instant developer evaluation
             const mockEmail = prompt("Simulating Google login sandbox popup!\nEnter your Google email address:", "bhaweshji@gmail.com");
