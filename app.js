@@ -170,14 +170,24 @@ function setupEventListeners() {
         e.preventDefault();
         isLoginMode = !isLoginMode;
         
+        const googleBtn = document.getElementById("btn-google-login");
+        
         if (isLoginMode) {
             authTitle.innerText = "Welcome back";
             submitBtn.innerText = "Sign In";
+            googleBtn.innerHTML = `
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.529-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.245-3.125C18.29 1.926 15.485 1 12.24 1 6.033 1 1 6.033 1 12.24s5.033 11.24 11.24 11.24c6.478 0 10.793-4.537 10.793-10.985 0-.74-.08-1.305-.18-1.865h-10.613z"/></svg>
+                Sign In with Google
+            `;
             switchText.innerText = "Don't have an account?";
             switchBtn.innerText = "Sign Up";
         } else {
             authTitle.innerText = "Create Account";
             submitBtn.innerText = "Register";
+            googleBtn.innerHTML = `
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.275 1.565-1.88 4.604-6.887 4.604-4.33 0-7.859-3.578-7.859-8s3.529-8 7.859-8c2.46 0 4.105 1.025 5.047 1.926l3.245-3.125C18.29 1.926 15.485 1 12.24 1 6.033 1 1 6.033 1 12.24s5.033 11.24 11.24 11.24c6.478 0 10.793-4.537 10.793-10.985 0-.74-.08-1.305-.18-1.865h-10.613z"/></svg>
+                Sign Up with Google
+            `;
             switchText.innerText = "Already have an account?";
             switchBtn.innerText = "Sign In";
         }
