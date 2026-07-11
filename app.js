@@ -7,12 +7,13 @@ const WS_BASE = isGitHubPages ? "ws://localhost:8000" : ((window.location.protoc
 // Firebase Configuration - Put your Firebase Credentials from console here!
 // By default, if credentials are unchanged, it falls back to sandbox mock sign-in.
 const firebaseConfig = {
-    apiKey: "AIzaSyFakeKeyPlaceholderForLocalRuns",
-    authDomain: "tradesim-placeholder.firebaseapp.com",
-    projectId: "tradesim-placeholder",
-    storageBucket: "tradesim-placeholder.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "1:1234567890:web:abcdef123456"
+  apiKey: "AIzaSyBnDBFx2UXRVIl-XnXZojPq00qIZuFX830",
+  authDomain: "myaitraining-4326a.firebaseapp.com",
+  projectId: "myaitraining-4326a",
+  storageBucket: "myaitraining-4326a.firebasestorage.app",
+  messagingSenderId: "451753280099",
+  appId: "1:451753280099:web:8f0d5a873875bdbe4e2e56",
+  measurementId: "G-9Q6F7GQSXP"
 };
 
 // Check if user has initialized Firebase
