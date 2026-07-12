@@ -269,7 +269,7 @@ async def prepopulate_historical_data():
         if count > 0:
             print("Database already contains stock tick history. Skipping pre-population.")
             # Load the current prices and opening prices
-            today_midnight = datetime.combine(datetime.now().date(), time.min).replace(tzinfo=timezone.utc)
+            today_midnight = datetime.combine(datetime.now().date(), time.min)
             for stock in STOCKS:
                 # Latest price
                 latest_stmt = select(StockTickDB.price).where(StockTickDB.stock_name == stock).order_by(StockTickDB.created_at.desc()).limit(1)
@@ -291,8 +291,8 @@ async def prepopulate_historical_data():
             return
 
         print("Pre-populating historical stock ticks starting from 1st July 2026...")
-        start_time = datetime(2026, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
-        end_time = datetime.now(timezone.utc)
+        start_time = datetime(2026, 7, 1, 0, 0, 0)
+        end_time = datetime.utcnow()
         
         # Initial prices
         prices = {
@@ -1122,13 +1122,20 @@ async def price_generation_loop():
             
         await asyncio.sleep(1.0)
 
+def make_naive(dt: datetime) -> datetime:
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 # Loop 2: Downsampling hourly and 6-hourly to keep DB under 30k rows
 async def downsampling_loop():
     await asyncio.sleep(10)
     while True:
         try:
             # We run checks every 10 minutes to verify if the top of the hour or 6-hour interval is crossed.
-            now = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             
             # 1. Hourly aggregation check (Run at minute 0)
             # Find all records with granularity='second' from the past hour, calculate 1-minute averages, delete original, insert minutes
@@ -1157,7 +1164,7 @@ async def downsampling_loop():
             # Query oldest second ticks
             oldest_tick_stmt = select(StockTickDB.created_at).where(StockTickDB.granularity == "second").order_by(StockTickDB.created_at.asc()).limit(1)
             oldest_tick_res = await db.execute(oldest_tick_stmt)
-            oldest_time = oldest_tick_res.scalar()
+            oldest_time = make_naive(oldest_tick_res.scalar())
             
             # If we have seconds ticks older than 1 hour, downsample in hourly blocks
             if oldest_time and oldest_time < one_hour_ago:
@@ -1212,7 +1219,7 @@ async def downsampling_loop():
             six_hours_ago = now - timedelta(hours=6)
             oldest_min_stmt = select(StockTickDB.created_at).where(StockTickDB.granularity == "minute").order_by(StockTickDB.created_at.asc()).limit(1)
             oldest_min_res = await db.execute(oldest_min_stmt)
-            oldest_min_time = oldest_min_res.scalar()
+            oldest_min_time = make_naive(oldest_min_res.scalar())
             
             if oldest_min_time and oldest_min_time < six_hours_ago:
                 stmt_min = select(StockTickDB).where(
