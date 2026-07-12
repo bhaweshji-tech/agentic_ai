@@ -65,7 +65,7 @@ class UserDB(Base):
 
 class StockTickDB(Base):
     __tablename__ = "stock_ticks"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     stock_name = Column(String(10), nullable=False)
     price = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
@@ -78,7 +78,7 @@ class StockTickDB(Base):
 
 class OrderDB(Base):
     __tablename__ = "orders"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(36), ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
     stock_name = Column(String(10), nullable=False)
     qty = Column(Integer, nullable=False)
@@ -97,7 +97,7 @@ class OrderDB(Base):
 
 class ActivityLogDB(Base):
     __tablename__ = "activity_logs"
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(36), ForeignKey("user_profiles.id", ondelete="CASCADE"), nullable=False)
     action_text = Column(String(500), nullable=False)
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
