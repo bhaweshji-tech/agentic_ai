@@ -117,7 +117,7 @@ async def init_db():
 
 # DB Dependency injection helper
 async def get_db():
-    async session = AsyncSessionLocal()
+    session = AsyncSessionLocal()
     try:
         yield session
     finally:
