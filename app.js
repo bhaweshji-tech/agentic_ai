@@ -335,10 +335,11 @@ function setupEventListeners() {
         const hasValidConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("FakeKeyPlaceholder");
         
         if (supabaseClient) {
+            const redirectUrl = window.location.origin + window.location.pathname;
             supabaseClient.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: redirectUrl
                 }
             }).catch(err => {
                 console.error("Supabase sign-in error:", err);

@@ -1381,3 +1381,20 @@ async def midnight_reset_loop():
             
         # Check every 10 seconds
         await asyncio.sleep(10)
+
+# Serve static frontend files directly from FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+@app.get("/")
+async def read_index():
+    return FileResponse("index.html")
+
+@app.get("/style.css")
+async def read_css():
+    return FileResponse("style.css")
+
+@app.get("/app.js")
+async def read_js():
+    return FileResponse("app.js")
+
