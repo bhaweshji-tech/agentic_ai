@@ -39,9 +39,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 </head>
 <body class="bg-darkBg text-gray-100 font-sans min-h-screen">
-    <!-- Authentication Panel (Login/Signup) -->
-    <div id="auth-panel" class="flex justify-center items-center min-h-screen p-4">
-        <div class="w-full max-w-md bg-darkCard backdrop-blur-md p-8 rounded-2xl border border-borderBlur shadow-2xl">
+    <!-- Authentication Panel (Login/Signup Modal Overlay) -->
+    <div id="auth-panel" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex justify-center items-center p-4 hidden">
+        <div class="w-full max-w-md bg-[#0f1624] p-8 rounded-2xl border border-borderBlur shadow-2xl relative">
+            <button id="btn-close-auth" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl font-bold">&times;</button>
             <div class="flex justify-center mb-6">
                 <div class="flex items-center gap-2">
                     <span class="text-2xl text-blue-500 font-extrabold">▲</span>
@@ -90,7 +91,7 @@
     </div>
 
     <!-- Main Trading Portal View -->
-    <div id="portal-panel" class="hidden min-h-screen flex flex-col">
+    <div id="portal-panel" class="min-h-screen flex flex-col">
         <!-- Top Navigation Header -->
         <header class="border-b border-borderBlur bg-darkCard/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-2">
@@ -113,21 +114,31 @@
             </div>
 
             <div class="flex items-center gap-4">
-                <div class="flex flex-col text-right">
-                    <span id="header-user-email" class="text-xs text-gray-400 font-medium">user@example.com</span>
-                    <div class="flex items-center gap-1.5 justify-end">
-                        <span class="text-xs text-gray-400">Virtual Cash:</span>
-                        <span id="header-user-balance" class="text-sm font-bold text-teal-400 font-mono">Rs. 5,000.00</span>
+                <!-- Logged-in profile view -->
+                <div id="header-user-profile" class="hidden flex items-center gap-4">
+                    <div class="flex flex-col text-right">
+                        <span id="header-user-email" class="text-xs text-gray-400 font-medium">user@example.com</span>
+                        <div class="flex items-center gap-1.5 justify-end">
+                            <span class="text-xs text-gray-400">Virtual Cash:</span>
+                            <span id="header-user-balance" class="text-sm font-bold text-teal-400 font-mono">Rs. 5,000.00</span>
+                        </div>
                     </div>
-                </div>
-                
-                <button id="btn-admin-panel" class="hidden bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/30 text-purple-300 font-semibold px-4 py-2 rounded-lg text-xs transition-all">
-                    Admin Panel
-                </button>
+                    
+                    <button id="btn-admin-panel" class="hidden bg-purple-600/20 hover:bg-purple-600/35 border border-purple-500/30 text-purple-300 font-semibold px-4 py-2 rounded-lg text-xs transition-all">
+                        Admin Panel
+                    </button>
 
-                <button id="btn-logout" class="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold px-4 py-2 rounded-lg text-xs transition-colors border border-borderBlur">
-                    Logout
-                </button>
+                    <button id="btn-logout" class="bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold px-4 py-2 rounded-lg text-xs transition-colors border border-borderBlur">
+                        Logout
+                    </button>
+                </div>
+
+                <!-- Logged-out CTA -->
+                <div id="header-auth-cta">
+                    <button id="btn-show-login" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg text-xs transition-all shadow-lg shadow-blue-600/20">
+                        Sign In to Trade
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -251,22 +262,34 @@
                 </div>
 
                 <!-- Order Placement Card (Span 1) -->
-                <div class="bg-darkCard border border-borderBlur p-6 rounded-xl flex flex-col gap-4">
-                    <h3 class="font-bold text-base text-white">Execution Terminal</h3>
-                    <div class="h-px bg-borderBlur w-full"></div>
-                    
-                    <!-- Form Buy/Sell Toggle -->
-                    <div class="grid grid-cols-2 gap-2 bg-[#0d1525] p-1 rounded-lg border border-borderBlur">
-                        <button id="btn-trade-buy" class="py-2 text-xs font-bold rounded-md transition-colors text-center text-teal-400 bg-teal-950/40 border border-teal-500/20">
-                            BUY
-                        </button>
-                        <button id="btn-trade-sell" class="py-2 text-xs font-bold rounded-md transition-colors text-center text-gray-400 hover:text-red-400">
-                            SELL
+                <div id="execution-panel-container" class="bg-darkCard border border-borderBlur p-6 rounded-xl flex flex-col gap-4 relative min-h-[300px]">
+                    <!-- Logged-out teaser -->
+                    <div id="execution-teaser" class="absolute inset-0 bg-[#0d1525]/95 flex flex-col justify-center items-center text-center p-6 rounded-xl z-20">
+                        <span class="text-3xl mb-3">📈</span>
+                        <h4 class="font-bold text-white mb-2">Virtual Trading Engine</h4>
+                        <p class="text-xs text-gray-400 max-w-[200px] mb-4">Sign in to execute trades and track your holdings.</p>
+                        <button id="btn-teaser-login" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg text-xs transition-all shadow-lg shadow-blue-600/20">
+                            Sign In to Trade
                         </button>
                     </div>
 
-                    <form id="trade-form" class="space-y-4">
-                        <!-- Target Stock -->
+                    <!-- Actual Execution Terminal Form -->
+                    <div id="execution-form-wrapper" class="hidden flex flex-col gap-4">
+                        <h3 class="font-bold text-base text-white">Execution Terminal</h3>
+                        <div class="h-px bg-borderBlur w-full"></div>
+                        
+                        <!-- Form Buy/Sell Toggle -->
+                        <div class="grid grid-cols-2 gap-2 bg-[#0d1525] p-1 rounded-lg border border-borderBlur">
+                            <button id="btn-trade-buy" class="py-2 text-xs font-bold rounded-md transition-colors text-center text-teal-400 bg-teal-950/40 border border-teal-500/20">
+                                BUY
+                            </button>
+                            <button id="btn-trade-sell" class="py-2 text-xs font-bold rounded-md transition-colors text-center text-gray-400 hover:text-red-400">
+                                SELL
+                            </button>
+                        </div>
+
+                        <form id="trade-form" class="space-y-4">
+                            <!-- Target Stock -->
                         <div>
                             <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">Target Stock</label>
                             <input type="text" id="trade-stock-display" readonly class="w-full bg-[#0d1525]/60 border border-borderBlur rounded-lg px-4 py-2.5 text-xs text-white font-bold select-none cursor-not-allowed" value="STOCK_A">
@@ -294,9 +317,15 @@
                         </div>
 
                         <!-- Stop Loss (Optional) -->
-                        <div>
+                        <div id="trade-stop-loss-group">
                             <label class="block text-[10px] font-bold uppercase tracking-wider text-red-400 mb-1">Stop Loss Threshold (Rs. - Optional)</label>
                             <input type="number" id="trade-stop-loss" min="0.01" step="0.01" class="w-full bg-[#0d1525] border border-red-500/20 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-red-500 text-white font-mono" placeholder="Auto sell if drops to (Rs.)">
+                        </div>
+
+                        <!-- Target Price / Take Profit (Optional) -->
+                        <div id="trade-target-price-group">
+                            <label class="block text-[10px] font-bold uppercase tracking-wider text-teal-400 mb-1">Target Price / Take Profit (Rs. - Optional)</label>
+                            <input type="number" id="trade-target-price" min="0.01" step="0.01" class="w-full bg-[#0d1525] border border-teal-500/20 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-teal-500 text-white font-mono" placeholder="Auto sell if rises to (Rs.)">
                         </div>
 
                         <!-- Calculation summary details -->
@@ -323,7 +352,8 @@
                         </button>
                     </form>
                 </div>
-            </section>
+            </div>
+        </section>
 
             <!-- Bottom Tabs (Holdings, Orders, Audit Logs, Report Card) -->
             <section class="bg-darkCard border border-borderBlur rounded-xl overflow-hidden">
@@ -380,6 +410,7 @@
                                         <th class="pb-3 font-semibold uppercase">Qty</th>
                                         <th class="pb-3 font-semibold uppercase">Execution Rate</th>
                                         <th class="pb-3 font-semibold uppercase">Stop Loss</th>
+                                        <th class="pb-3 font-semibold uppercase">Target Price</th>
                                         <th class="pb-3 font-semibold uppercase">Mode</th>
                                         <th class="pb-3 font-semibold uppercase">Status</th>
                                         <th class="pb-3 font-semibold uppercase">Timestamp</th>

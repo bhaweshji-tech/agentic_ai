@@ -4,6 +4,19 @@ const isGitHubPages = window.location.hostname.includes("github.io");
 const API_BASE = isGitHubPages ? "http://localhost:8000" : (window.location.protocol + "//" + window.location.host);
 const WS_BASE = isGitHubPages ? "ws://localhost:8000" : ((window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host);
 
+// Supabase Configuration
+const SUPABASE_URL = "https://gsdblteofsongnjdjhpc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_u9dNq32zPDAFOO415PArvQ_ljzEEiaC";
+
+let supabaseClient = null;
+try {
+    if (typeof supabase !== 'undefined') {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+} catch (e) {
+    console.warn("Supabase client failed to load.", e);
+}
+
 // Firebase Configuration - Put your Firebase Credentials from console here!
 // By default, if credentials are unchanged, it falls back to sandbox mock sign-in.
 const firebaseConfig = {
@@ -58,7 +71,24 @@ function initApp() {
     setupEventListeners();
     initCountdownTimer();
     
-    // Handle Firebase redirect results on page load
+    // Check if we have a Supabase session first
+    if (supabaseClient) {
+        supabaseClient.auth.getSession().then(({ data: { session } }) => {
+            if (session && session.user) {
+                syncUserProfile(session.user.id, session.user.email);
+            } else {
+                handleFirebaseOrSessionCheck();
+            }
+        }).catch(err => {
+            console.error("Supabase getSession error:", err);
+            handleFirebaseOrSessionCheck();
+        });
+    } else {
+        handleFirebaseOrSessionCheck();
+    }
+}
+
+function handleFirebaseOrSessionCheck() {
     const hasValidConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("FakeKeyPlaceholder");
     if (firebaseAuth && hasValidConfig) {
         firebaseAuth.getRedirectResult()
@@ -85,17 +115,41 @@ function checkTokenAndSession() {
     if (state.token) {
         verifySession();
     } else {
-        showPanel("auth-panel");
+        setupPublicView();
+        connectWebSocket();
+        initializeChart();
+        fetchSelectedHistoricalData();
     }
 }
 
 // 1. Panel Views Navigation
 function showPanel(panelId) {
-    document.getElementById("auth-panel").classList.add("hidden");
-    document.getElementById("portal-panel").classList.add("hidden");
-    document.getElementById("blocked-overlay").classList.add("hidden");
+    if (panelId === "auth-panel") {
+        document.getElementById("auth-panel").classList.remove("hidden");
+    } else if (panelId === "blocked-overlay") {
+        document.getElementById("blocked-overlay").classList.remove("hidden");
+        document.getElementById("portal-panel").classList.add("hidden");
+        document.getElementById("auth-panel").classList.add("hidden");
+    } else {
+        document.getElementById("portal-panel").classList.remove("hidden");
+        document.getElementById("auth-panel").classList.add("hidden");
+        document.getElementById("blocked-overlay").classList.add("hidden");
+    }
+}
+
+function setupPublicView() {
+    state.user = null;
+    document.getElementById("header-user-profile").classList.add("hidden");
+    document.getElementById("header-auth-cta").classList.remove("hidden");
     
-    document.getElementById(panelId).classList.remove("hidden");
+    document.getElementById("execution-teaser").classList.remove("hidden");
+    document.getElementById("execution-form-wrapper").classList.add("hidden");
+    
+    // Render placeholders
+    renderHoldingsTable();
+    renderOrdersTable();
+    renderLogsTable();
+    renderReportCardTable({ trades: [], summary: { total_trades: 0, manual_trades: 0, automatic_trades: 0, profit: 0, current_balance: 5000 } });
 }
 
 function verifySession() {
@@ -111,6 +165,11 @@ function verifySession() {
                 }
                 
                 setupDashboardHeader();
+                document.getElementById("header-user-profile").classList.remove("hidden");
+                document.getElementById("header-auth-cta").classList.add("hidden");
+                document.getElementById("execution-teaser").classList.add("hidden");
+                document.getElementById("execution-form-wrapper").classList.remove("hidden");
+                
                 showPanel("portal-panel");
                 connectWebSocket();
                 initializeChart();
@@ -172,7 +231,8 @@ function logout() {
         state.socket.close();
         state.socket = null;
     }
-    showPanel("auth-panel");
+    setupPublicView();
+    checkTokenAndSession();
 }
 
 function showBlockedScreen(msg) {
@@ -182,6 +242,22 @@ function showBlockedScreen(msg) {
 
 // 2. Auth Actions (Login/Signup toggle and submission)
 function setupEventListeners() {
+    // Show/Close Auth modal
+    const showLoginBtn = document.getElementById("btn-show-login");
+    if (showLoginBtn) {
+        showLoginBtn.addEventListener("click", () => showPanel("auth-panel"));
+    }
+    const teaserLoginBtn = document.getElementById("btn-teaser-login");
+    if (teaserLoginBtn) {
+        teaserLoginBtn.addEventListener("click", () => showPanel("auth-panel"));
+    }
+    const closeAuthBtn = document.getElementById("btn-close-auth");
+    if (closeAuthBtn) {
+        closeAuthBtn.addEventListener("click", () => {
+            document.getElementById("auth-panel").classList.add("hidden");
+        });
+    }
+
     // Switch login/signup forms
     const switchBtn = document.getElementById("auth-switch-btn");
     const switchText = document.getElementById("auth-switch-text");
@@ -251,14 +327,25 @@ function setupEventListeners() {
         });
     });
     
-    // Google OAuth Sign-In via Firebase
+    // Google OAuth Sign-In
     document.getElementById("btn-google-login").addEventListener("click", () => {
         const errorAlert = document.getElementById("auth-error-alert");
         errorAlert.classList.add("hidden");
 
         const hasValidConfig = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("FakeKeyPlaceholder");
         
-        if (firebaseAuth && hasValidConfig) {
+        if (supabaseClient) {
+            supabaseClient.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    redirectTo: window.location.origin
+                }
+            }).catch(err => {
+                console.error("Supabase sign-in error:", err);
+                errorAlert.innerText = "Supabase Google login failed.";
+                errorAlert.classList.remove("hidden");
+            });
+        } else if (firebaseAuth && hasValidConfig) {
             const provider = new firebase.auth.GoogleAuthProvider();
             firebaseAuth.signInWithRedirect(provider);
         } else {
@@ -309,7 +396,6 @@ function setupEventListeners() {
     document.getElementById("trade-qty").addEventListener("input", calculateTradeEstCosts);
     document.getElementById("trade-limit-price").addEventListener("input", calculateTradeEstCosts);
     
-    // Trade Form Submit
     document.getElementById("trade-form").addEventListener("submit", (e) => {
         e.preventDefault();
         const stock_name = state.activeStock;
@@ -318,6 +404,7 @@ function setupEventListeners() {
         const order_mode = document.getElementById("trade-mode").value;
         const limit_price = order_mode === "LIMIT" ? parseFloat(document.getElementById("trade-limit-price").value) : null;
         const stop_loss = document.getElementById("trade-stop-loss").value ? parseFloat(document.getElementById("trade-stop-loss").value) : null;
+        const target_price = document.getElementById("trade-target-price").value ? parseFloat(document.getElementById("trade-target-price").value) : null;
         
         const errorBox = document.getElementById("trade-error-msg");
         errorBox.classList.add("hidden");
@@ -331,7 +418,8 @@ function setupEventListeners() {
                 order_type,
                 order_mode,
                 limit_price,
-                stop_loss
+                stop_loss,
+                target_price
             })
         })
         .then(async res => {
@@ -341,6 +429,7 @@ function setupEventListeners() {
                 document.getElementById("trade-qty").value = "";
                 document.getElementById("trade-limit-price").value = "";
                 document.getElementById("trade-stop-loss").value = "";
+                document.getElementById("trade-target-price").value = "";
                 calculateTradeEstCosts();
                 
                 // Show floating alerts if manual execute
@@ -397,7 +486,7 @@ function connectWebSocket() {
         state.socket.close();
     }
     
-    state.socket = new WebSocket(`${WS_BASE}/ws/${state.token}`);
+    state.socket = new WebSocket(`${WS_BASE}/ws/${state.token || "public"}`);
     
     state.socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
@@ -546,17 +635,31 @@ function setTradeType(type) {
     const buyBtn = document.getElementById("btn-trade-buy");
     const sellBtn = document.getElementById("btn-trade-sell");
     const submitBtn = document.getElementById("btn-submit-order");
+    const stopLossGroup = document.getElementById("trade-stop-loss-group");
+    const targetPriceGroup = document.getElementById("trade-target-price-group");
     
     if (type === "BUY") {
         buyBtn.className = "py-2 text-xs font-bold rounded-md transition-colors text-center text-teal-400 bg-teal-950/40 border border-teal-500/20";
         sellBtn.className = "py-2 text-xs font-bold rounded-md transition-colors text-center text-gray-400 hover:text-red-400";
         submitBtn.className = "w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 rounded-lg text-xs transition-colors shadow-lg shadow-teal-600/20 uppercase tracking-wider";
         submitBtn.innerText = "Execute BUY Order";
+        
+        if (stopLossGroup) stopLossGroup.classList.remove("hidden");
+        if (targetPriceGroup) targetPriceGroup.classList.remove("hidden");
     } else {
         sellBtn.className = "py-2 text-xs font-bold rounded-md transition-colors text-center text-red-400 bg-red-950/40 border border-red-500/20";
         buyBtn.className = "py-2 text-xs font-bold rounded-md transition-colors text-center text-gray-400 hover:text-teal-400";
         submitBtn.className = "w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg text-xs transition-colors shadow-lg shadow-red-600/20 uppercase tracking-wider";
         submitBtn.innerText = "Execute SELL Order";
+        
+        if (stopLossGroup) {
+            stopLossGroup.classList.add("hidden");
+            document.getElementById("trade-stop-loss").value = "";
+        }
+        if (targetPriceGroup) {
+            targetPriceGroup.classList.add("hidden");
+            document.getElementById("trade-target-price").value = "";
+        }
     }
     calculateTradeEstCosts();
 }
@@ -641,6 +744,18 @@ function renderHoldingsTable() {
     const tbody = document.getElementById("holdings-table-body");
     tbody.innerHTML = "";
     
+    if (!state.user) {
+        tbody.innerHTML = `
+            <tr class="border-b border-borderBlur/30 text-gray-400">
+                <td colspan="5" class="py-6 text-center">
+                    <p class="text-sm font-semibold text-white mb-1">Portfolio Locked</p>
+                    <p class="text-xs text-gray-400">Sign in to view your holdings.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
     let hasHoldings = false;
     
     STOCKS.forEach(stock => {
@@ -691,10 +806,22 @@ function renderOrdersTable() {
     const tbody = document.getElementById("orders-table-body");
     tbody.innerHTML = "";
     
+    if (!state.user) {
+        tbody.innerHTML = `
+            <tr class="border-b border-borderBlur/30 text-gray-400">
+                <td colspan="10" class="py-6 text-center">
+                    <p class="text-sm font-semibold text-white mb-1">History Locked</p>
+                    <p class="text-xs text-gray-400">Sign in to view your order history.</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
     if (state.orders.length === 0) {
         tbody.innerHTML = `
             <tr class="border-b border-borderBlur/30 text-gray-400">
-                <td colspan="9" class="py-4 text-center">No order records found.</td>
+                <td colspan="10" class="py-4 text-center">No order records found.</td>
             </tr>
         `;
         return;
@@ -718,6 +845,7 @@ function renderOrdersTable() {
             <td class="py-3 font-mono font-medium">${o.qty}</td>
             <td class="py-3 font-mono">Rs. ${o.price.toFixed(2)}</td>
             <td class="py-3 font-mono text-gray-400">${o.stop_loss ? 'Rs. ' + o.stop_loss.toFixed(2) : '-'}</td>
+            <td class="py-3 font-mono text-gray-400">${o.target_price ? 'Rs. ' + o.target_price.toFixed(2) : '-'}</td>
             <td class="py-3 text-[11px] text-gray-400">${o.mode}</td>
             <td class="py-3 text-[11px] ${statusClass}">${o.status}</td>
             <td class="py-3 text-gray-400">${timestamp}</td>
@@ -729,6 +857,15 @@ function renderOrdersTable() {
 function renderLogsTable() {
     const container = document.getElementById("activity-logs-container");
     container.innerHTML = "";
+    
+    if (!state.user) {
+        container.innerHTML = `
+            <div class="text-center py-6">
+                <p class="text-xs text-gray-500 font-sans">Logs Locked: Sign in to view your activity logs.</p>
+            </div>
+        `;
+        return;
+    }
     
     if (state.logs.length === 0) {
         container.innerHTML = `<p class="text-center py-4 text-gray-500 font-sans">No activity logs recorded today.</p>`;
@@ -747,6 +884,20 @@ function renderLogsTable() {
 function renderReportCardTable(data) {
     const tbody = document.getElementById("report-table-body");
     tbody.innerHTML = "";
+    
+    if (!state.user) {
+        tbody.innerHTML = `
+            <tr class="border-b border-borderBlur/30 text-gray-400">
+                <td colspan="8" class="py-6 text-center font-sans">
+                    <p class="text-sm font-semibold text-white mb-1">Report Locked</p>
+                    <p class="text-xs text-gray-400">Sign in to view your daily performance report card.</p>
+                </td>
+            </tr>
+        `;
+        document.getElementById("report-summary-text").innerHTML = "Sign in to view today's session summary.";
+        document.getElementById("report-current-balance").innerText = "Rs. 5,000.00";
+        return;
+    }
     
     if (data.trades.length === 0) {
         tbody.innerHTML = `

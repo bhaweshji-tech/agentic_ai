@@ -60,6 +60,7 @@ class UserDB(Base):
     virtual_balance = Column(Numeric(10, 2), default=5000.00, nullable=False)
     is_blocked = Column(Boolean, default=False, nullable=False)
     last_login_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    last_active_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     hashed_password = Column(String(255), nullable=True) # Nullable for native Supabase Auth users
 
 class StockTickDB(Base):
@@ -83,9 +84,10 @@ class OrderDB(Base):
     qty = Column(Integer, nullable=False)
     execution_price = Column(Numeric(10, 2), nullable=False)
     stop_loss = Column(Numeric(10, 2), nullable=True)
+    target_price = Column(Numeric(10, 2), nullable=True)
     status = Column(String(20), default="OPEN", nullable=False) # 'OPEN', 'COMPLETED', 'AUTO_CLOSED', 'CANCELLED'
     order_type = Column(String(10), nullable=False) # 'BUY', 'SELL'
-    mode = Column(String(50), nullable=False) # 'Manual (Market)', 'Manual (Limit)', 'Automatic (Stop Loss)', 'Automatic (Force Closed)'
+    mode = Column(String(50), nullable=False) # 'Manual (Market)', 'Manual (Limit)', 'Automatic (Stop Loss)', 'Automatic (Target Price)', 'Automatic (Force Closed)'
     created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
 
     __table_args__ = (
@@ -144,6 +146,7 @@ class OrderCreate(BaseModel):
     order_mode: str # 'MARKET', 'LIMIT'
     limit_price: Optional[float] = None
     stop_loss: Optional[float] = None
+    target_price: Optional[float] = None
 
 class UserSync(BaseModel):
     id: str
@@ -223,11 +226,154 @@ def get_current_user(token: str) -> dict:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+async def update_user_activity(token: str = Query(...), db: AsyncSession = Depends(get_db)) -> UserDB:
+    payload = get_current_user(token)
+    user_id = payload.get("id")
+    
+    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="You have been blocked by the admin. Please contact admin.")
+        
+    # Check 2-hour idle session timeout
+    now = datetime.now(timezone.utc)
+    last_active = user.last_active_at.replace(tzinfo=timezone.utc) if user.last_active_at.tzinfo is None else user.last_active_at
+    if now - last_active > timedelta(hours=2):
+        raise HTTPException(status_code=401, detail="Session expired due to 2 hours of inactivity. Please log in again.")
+        
+    user.last_active_at = now
+    
+    # Check midnight reset fallback (if user's last login date is before today, reset balance)
+    today_date = now.date()
+    last_login_date = user.last_login_at.date()
+    if last_login_date < today_date:
+        user.virtual_balance = 5000.00
+        user.last_login_at = now
+        log = ActivityLogDB(user_id=user.id, action_text="Daily balance reset: balance set to exactly 5,000.00 INR.")
+        db.add(log)
+        
+    await db.commit()
+    return user
+
 # 5. Core APIs (Auth, Profile, History, Orders)
+
+async def prepopulate_historical_data():
+    async with AsyncSessionLocal() as db:
+        # Check if we already have ticks
+        stmt = select(func.count(StockTickDB.id))
+        res = await db.execute(stmt)
+        count = res.scalar() or 0
+        if count > 0:
+            print("Database already contains stock tick history. Skipping pre-population.")
+            # Load the current prices and opening prices
+            today_midnight = datetime.combine(datetime.now().date(), time.min).replace(tzinfo=timezone.utc)
+            for stock in STOCKS:
+                # Latest price
+                latest_stmt = select(StockTickDB.price).where(StockTickDB.stock_name == stock).order_by(StockTickDB.created_at.desc()).limit(1)
+                latest_res = await db.execute(latest_stmt)
+                latest_price = latest_res.scalar()
+                if latest_price:
+                    market_prices[stock] = float(latest_price)
+                
+                # Opening price (first tick of today after midnight)
+                open_stmt = select(StockTickDB.price).where(
+                    and_(StockTickDB.stock_name == stock, StockTickDB.created_at >= today_midnight)
+                ).order_by(StockTickDB.created_at.asc()).limit(1)
+                open_res = await db.execute(open_stmt)
+                open_price = open_res.scalar()
+                if open_price:
+                    market_opening_prices[stock] = float(open_price)
+                else:
+                    market_opening_prices[stock] = market_prices[stock]
+            return
+
+        print("Pre-populating historical stock ticks starting from 1st July 2026...")
+        start_time = datetime(2026, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
+        end_time = datetime.now(timezone.utc)
+        
+        # Initial prices
+        prices = {
+            "STOCK_A": 100.00,
+            "STOCK_B": 250.00,
+            "STOCK_C": 500.00,
+            "STOCK_D": 1200.00,
+        }
+        
+        # We divide the timeline into 3 segments:
+        # 1. 5-minute ticks: from start_time to 6 hours ago
+        # 2. 1-minute ticks: from 6 hours ago to 1 hour ago
+        # 3. 10-second ticks: from 1 hour ago to now
+        six_hours_ago = end_time - timedelta(hours=6)
+        one_hour_ago = end_time - timedelta(hours=1)
+        
+        ticks_to_insert = []
+        
+        # Segment 1: 5-minute averages
+        curr = start_time
+        while curr < six_hours_ago:
+            for stock in STOCKS:
+                if random.random() < 0.70:
+                    delta = random.uniform(-0.001, 0.001)
+                    prices[stock] = round(prices[stock] * (1 + delta), 2)
+                ticks_to_insert.append(StockTickDB(
+                    stock_name=stock,
+                    price=prices[stock],
+                    granularity="5minute",
+                    created_at=curr
+                ))
+            curr += timedelta(minutes=5)
+            
+        # Segment 2: 1-minute averages
+        curr = six_hours_ago
+        while curr < one_hour_ago:
+            for stock in STOCKS:
+                if random.random() < 0.70:
+                    delta = random.uniform(-0.001, 0.001)
+                    prices[stock] = round(prices[stock] * (1 + delta), 2)
+                ticks_to_insert.append(StockTickDB(
+                    stock_name=stock,
+                    price=prices[stock],
+                    granularity="minute",
+                    created_at=curr
+                ))
+            curr += timedelta(minutes=1)
+            
+        # Segment 3: 10-second ticks (downsampled slightly to stay well within 30k limit)
+        curr = one_hour_ago
+        while curr < end_time:
+            for stock in STOCKS:
+                if random.random() < 0.70:
+                    delta = random.uniform(-0.001, 0.001)
+                    prices[stock] = round(prices[stock] * (1 + delta), 2)
+                ticks_to_insert.append(StockTickDB(
+                    stock_name=stock,
+                    price=prices[stock],
+                    granularity="second",
+                    created_at=curr
+                ))
+            curr += timedelta(seconds=10)
+            
+        # Save to DB in chunks
+        chunk_size = 1000
+        for i in range(0, len(ticks_to_insert), chunk_size):
+            chunk = ticks_to_insert[i:i+chunk_size]
+            db.add_all(chunk)
+            await db.commit()
+            
+        # Update current price caches
+        for stock in STOCKS:
+            market_prices[stock] = prices[stock]
+            market_opening_prices[stock] = prices[stock]
+            
+        print(f"Successfully populated {len(ticks_to_insert)} historical ticks.")
 
 @app.on_event("startup")
 async def startup_event():
     await init_db()
+    await prepopulate_historical_data()
     # Start loop background threads
     asyncio.create_task(price_generation_loop())
     asyncio.create_task(downsampling_loop())
@@ -327,18 +473,7 @@ async def sync_supabase_user(payload: UserSync, db: AsyncSession = Depends(get_d
     return {"access_token": token, "token_type": "bearer", "email": db_user.email, "is_admin": is_admin, "user_id": db_user.id}
 
 @app.get("/api/user/profile")
-async def get_profile(token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    payload = get_current_user(token)
-    user_id = payload.get("id")
-    
-    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    if user.is_blocked:
-        raise HTTPException(status_code=403, detail="You have been blocked by the admin. Please contact admin.")
-        
+async def get_profile(user: UserDB = Depends(update_user_activity)):
     return {
         "id": user.id,
         "email": user.email,
@@ -427,25 +562,14 @@ async def get_user_holdings(user_id: str, db: AsyncSession) -> Dict[str, int]:
     return holdings
 
 @app.get("/api/orders/holdings")
-async def get_holdings(token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    payload = get_current_user(token)
-    user_id = payload.get("id")
-    holdings = await get_user_holdings(user_id, db)
+async def get_holdings(user: UserDB = Depends(update_user_activity), db: AsyncSession = Depends(get_db)):
+    holdings = await get_user_holdings(user.id, db)
     return holdings
 
 @app.post("/api/orders/place")
-async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    payload = get_current_user(token)
-    user_id = payload.get("id")
+async def place_order(order: OrderCreate, user: UserDB = Depends(update_user_activity), db: AsyncSession = Depends(get_db)):
+    user_id = user.id
     
-    # Load user profile
-    result = await db.execute(select(UserDB).where(UserDB.id == user_id))
-    user = result.scalars().first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User profile not found")
-    if user.is_blocked:
-        raise HTTPException(status_code=403, detail="Blocked user cannot trade")
-        
     stock_price = market_prices.get(order.stock_name)
     if not stock_price:
         raise HTTPException(status_code=400, detail="Invalid stock name")
@@ -479,6 +603,7 @@ async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSess
             qty=order.qty,
             execution_price=execution_price,
             stop_loss=order.stop_loss,
+            target_price=order.target_price,
             status=order_status,
             order_type="BUY",
             mode=f"Manual ({order.order_mode.capitalize()})"
@@ -489,6 +614,8 @@ async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSess
         action = f"Placed manual {order.order_mode.lower()} BUY of {order.qty} {order.stock_name} shares at Rs. {execution_price:.2f}."
         if order.stop_loss:
             action += f" Stop Loss: Rs. {order.stop_loss:.2f}"
+        if order.target_price:
+            action += f" Target Price: Rs. {order.target_price:.2f}"
         log = ActivityLogDB(user_id=user_id, action_text=action)
         db.add(log)
         
@@ -498,7 +625,6 @@ async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSess
         current_holding = holdings.get(order.stock_name, 0)
         
         # Check pending limit sells to ensure they don't lock or double sell
-        # For simplicity, user cannot sell more than they hold:
         if current_holding < order.qty:
             raise HTTPException(status_code=400, detail=f"Insufficient share holdings to sell. Attempted: {order.qty}, Held: {current_holding}")
             
@@ -512,6 +638,7 @@ async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSess
             qty=order.qty,
             execution_price=execution_price,
             stop_loss=order.stop_loss,
+            target_price=order.target_price,
             status=order_status,
             order_type="SELL",
             mode=f"Manual ({order.order_mode.capitalize()})"
@@ -536,9 +663,8 @@ async def place_order(order: OrderCreate, token: str = Query(...), db: AsyncSess
     return {"status": "success", "order_id": new_order.id, "balance": float(user.virtual_balance)}
 
 @app.get("/api/user/activity")
-async def get_activity_logs(token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    payload = get_current_user(token)
-    user_id = payload.get("id")
+async def get_activity_logs(user: UserDB = Depends(update_user_activity), db: AsyncSession = Depends(get_db)):
+    user_id = user.id
     
     # Retrieve last 100 activity logs
     stmt = select(ActivityLogDB).where(ActivityLogDB.user_id == user_id).order_by(desc(ActivityLogDB.created_at)).limit(100)
@@ -565,6 +691,7 @@ async def get_activity_logs(token: str = Query(...), db: AsyncSession = Depends(
                 "qty": o.qty,
                 "price": float(o.execution_price),
                 "stop_loss": float(o.stop_loss) if o.stop_loss else None,
+                "target_price": float(o.target_price) if o.target_price else None,
                 "status": o.status,
                 "type": o.order_type,
                 "mode": o.mode,
@@ -574,9 +701,8 @@ async def get_activity_logs(token: str = Query(...), db: AsyncSession = Depends(
     }
 
 @app.get("/api/user/report")
-async def get_report_data(token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    payload = get_current_user(token)
-    user_id = payload.get("id")
+async def get_report_data(user: UserDB = Depends(update_user_activity), db: AsyncSession = Depends(get_db)):
+    user_id = user.id
     
     # Fetch all orders of the user today
     today_start = datetime.combine(datetime.now().date(), time.min)
@@ -590,11 +716,7 @@ async def get_report_data(token: str = Query(...), db: AsyncSession = Depends(ge
     result = await db.execute(stmt)
     orders = result.scalars().all()
     
-    # Fetch current balance
-    user_stmt = select(UserDB).where(UserDB.id == user_id)
-    user_res = await db.execute(user_stmt)
-    user = user_res.scalars().first()
-    balance = float(user.virtual_balance) if user else 5000.0
+    balance = float(user.virtual_balance)
     
     report_items = []
     manual_count = 0
@@ -631,16 +753,15 @@ async def get_report_data(token: str = Query(...), db: AsyncSession = Depends(ge
         }
     }
 
-# 6. Administrative APIs (Admin checks)
-
-def verify_admin(token: str) -> None:
-    payload = get_current_user(token)
-    if not payload.get("is_admin") or payload.get("sub") != "bhaweshji@gmail.com":
+async def verify_admin(token: str, db: AsyncSession) -> UserDB:
+    user = await update_user_activity(token, db)
+    if user.email != "bhaweshji@gmail.com":
         raise HTTPException(status_code=403, detail="Access denied. Administrators only.")
+    return user
 
 @app.get("/api/admin/users")
 async def admin_get_users(token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    verify_admin(token)
+    await verify_admin(token, db)
     
     stmt = select(UserDB).order_by(UserDB.email.asc())
     result = await db.execute(stmt)
@@ -658,7 +779,7 @@ async def admin_get_users(token: str = Query(...), db: AsyncSession = Depends(ge
 
 @app.post("/api/admin/block")
 async def admin_toggle_block(user_id: str, is_blocked: bool, token: str = Query(...), db: AsyncSession = Depends(get_db)):
-    verify_admin(token)
+    await verify_admin(token, db)
     
     result = await db.execute(select(UserDB).where(UserDB.id == user_id))
     user = result.scalars().first()
@@ -672,8 +793,6 @@ async def admin_toggle_block(user_id: str, is_blocked: bool, token: str = Query(
     
     # Log administrative action
     action = f"User profile {'BLOCKED' if is_blocked else 'UNBLOCKED'} by administrator."
-    admin_payload = get_current_user(token)
-    admin_id = admin_payload.get("id")
     log = ActivityLogDB(user_id=user_id, action_text=action)
     db.add(log)
     await db.commit()
@@ -687,27 +806,31 @@ async def admin_toggle_block(user_id: str, is_blocked: bool, token: str = Query(
 # 7. WebSocket Server endpoint for real-time tickers
 @app.websocket("/ws/{token}")
 async def websocket_endpoint(websocket: WebSocket, token: str):
-    try:
-        # Validate JWT token
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
-        user_id = payload.get("id")
-        user_email = payload.get("sub")
-    except jwt.PyJWTError:
-        await websocket.close(code=4001, reason="Invalid verification token")
-        return
-        
-    # Check if user is blocked in DB
-    async session = AsyncSessionLocal()
-    try:
-        res = await session.execute(select(UserDB).where(UserDB.id == user_id))
-        user = res.scalars().first()
-        if not user or user.is_blocked:
-            await websocket.close(code=4003, reason="Blocked user connection rejected")
+    is_public = (token == "public")
+    user_id = None
+    
+    if not is_public:
+        try:
+            # Validate JWT token
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
+            user_id = payload.get("id")
+        except jwt.PyJWTError:
+            await websocket.close(code=4001, reason="Invalid verification token")
             return
-    finally:
-        await session.close()
+            
+        # Check if user is blocked in DB
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(UserDB).where(UserDB.id == user_id))
+            user = res.scalars().first()
+            if not user or user.is_blocked:
+                await websocket.close(code=4003, reason="Blocked user connection rejected")
+                return
+            # Update active timestamp at connection time
+            user.last_active_at = datetime.now(timezone.utc)
+            await session.commit()
 
-    await manager.connect(user_id, websocket)
+    conn_id = user_id if not is_public else f"public-{id(websocket)}"
+    await manager.connect(conn_id, websocket)
     
     # Send current static opening prices immediately
     await websocket.send_json({
@@ -720,10 +843,24 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
         while True:
             # Keep connection alive, listen for any client messages (like keepalives)
             data = await websocket.receive_text()
+            
+            # If authenticated, update user activity on ping/message to keep session alive
+            if not is_public:
+                async with AsyncSessionLocal() as session:
+                    res = await session.execute(select(UserDB).where(UserDB.id == user_id))
+                    user = res.scalars().first()
+                    if user:
+                        # Check block status dynamically
+                        if user.is_blocked:
+                            await manager.force_logout_user(user_id, "Blocked by administrator")
+                            break
+                        user.last_active_at = datetime.now(timezone.utc)
+                        await session.commit()
+            
             # Send simple ping-pong
             await websocket.send_json({"type": "PONG"})
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
+        manager.disconnect(conn_id)
 
 # 8. Asynchronous Background Core Loop Services
 
@@ -916,6 +1053,65 @@ async def price_generation_loop():
                         }, o.user_id)
                     else:
                         # User already sold the shares, just deactivate stop loss monitor state
+                        o.status = "AUTO_CLOSED"
+            
+            # Process Target Price triggers (Iterate through COMPLETED buy positions)
+            stmt_tp = select(OrderDB).where(
+                and_(
+                    OrderDB.order_type == "BUY",
+                    OrderDB.status == "COMPLETED",
+                    OrderDB.target_price.isnot(None)
+                )
+            )
+            res_tp = await db.execute(stmt_tp)
+            tp_candidates = res_tp.scalars().all()
+            
+            for o in tp_candidates:
+                curr_price = market_prices.get(o.stock_name)
+                # If price rises to or above target_price
+                if curr_price >= float(o.target_price):
+                    user_res = await db.execute(select(UserDB).where(UserDB.id == o.user_id))
+                    user = user_res.scalars().first()
+                    if not user:
+                        continue
+                        
+                    # Check if they still hold shares of this stock
+                    holdings = await get_user_holdings(o.user_id, db)
+                    held_shares = holdings.get(o.stock_name, 0)
+                    
+                    qty_to_sell = min(o.qty, held_shares)
+                    
+                    if qty_to_sell > 0:
+                        # Auto execute counter sell trade
+                        cash_gain = qty_to_sell * curr_price
+                        user.virtual_balance = float(user.virtual_balance) + cash_gain
+                        
+                        o.status = "AUTO_CLOSED"
+                        
+                        # Add auto counter order
+                        counter_order = OrderDB(
+                            user_id=o.user_id,
+                            stock_name=o.stock_name,
+                            qty=qty_to_sell,
+                            execution_price=curr_price,
+                            status="COMPLETED",
+                            order_type="SELL",
+                            mode="Automatic (Target Price)"
+                        )
+                        db.add(counter_order)
+                        
+                        log = ActivityLogDB(
+                            user_id=o.user_id,
+                            action_text=f"TARGET PRICE triggered on order {o.id}. Auto-sold {qty_to_sell} {o.stock_name} shares at Rs. {curr_price:.2f}."
+                        )
+                        db.add(log)
+                        
+                        await manager.send_personal_message({
+                            "type": "ORDER_EXECUTED",
+                            "message": f"TARGET PRICE triggered! Automatically sold {qty_to_sell} {o.stock_name} shares at Rs. {curr_price:.2f}!",
+                            "balance": float(user.virtual_balance)
+                        }, o.user_id)
+                    else:
                         o.status = "AUTO_CLOSED"
             
             await db.commit()
