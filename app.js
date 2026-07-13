@@ -1094,6 +1094,11 @@ function fetchSelectedHistoricalData() {
     const start = document.getElementById("chart-range-start").value;
     const end = document.getElementById("chart-range-end").value;
     
+    if (start && end && start > end) {
+        showWarningToast("Start date must be before end date.");
+        return;
+    }
+    
     let url = `${API_BASE}/api/stocks/history?stock_name=${stock}&granularity=${granularity}`;
     if (start) {
         url += `&start_time=${new Date(start + "Z").toISOString()}`;
@@ -1255,22 +1260,26 @@ function updateDatePickerLimits() {
     if (!startPicker || !endPicker) return;
     
     const now = new Date();
-    const nowStr = formatDateForPicker(now);
     
     let minStr = "2026-07-01T00:00";
-    let maxStr = nowStr;
+    let maxStr = formatDateForPicker(now);
     
     if (granularity === "second") {
-        // Last 1 hour only
+        // Last 1 hour only (now - 1 hour to now)
         const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
         minStr = formatDateForPicker(oneHourAgo);
+        maxStr = formatDateForPicker(now);
     } else if (granularity === "minute") {
-        // Last 6 hours only
+        // Between 6 hours ago and 1 hour ago
         const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
         minStr = formatDateForPicker(sixHoursAgo);
+        maxStr = formatDateForPicker(oneHourAgo);
     } else if (granularity === "5minute") {
-        // From 1st July 2026
+        // Between 1st July 2026 and 6 hours ago
+        const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
         minStr = "2026-07-01T00:00";
+        maxStr = formatDateForPicker(sixHoursAgo);
     }
     
     startPicker.min = minStr;
