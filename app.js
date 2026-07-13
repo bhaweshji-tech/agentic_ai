@@ -479,6 +479,30 @@ function setupEventListeners() {
     
     // Fetch History manual button trigger
     document.getElementById("btn-fetch-history").addEventListener("click", fetchSelectedHistoricalData);
+
+    // Chart Granularity Change Handler
+    const granSelect = document.getElementById("chart-granularity");
+    if (granSelect) {
+        granSelect.addEventListener("change", () => {
+            const startPicker = document.getElementById("chart-range-start");
+            const endPicker = document.getElementById("chart-range-end");
+            
+            if (granSelect.value === "second") {
+                // Clear filters to enter live mode
+                startPicker.value = "";
+                endPicker.value = "";
+            } else {
+                // Prefill default range if empty
+                if (!startPicker.value || !endPicker.value) {
+                    const today = new Date();
+                    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+                    startPicker.value = formatDateForPicker(startOfToday);
+                    endPicker.value = formatDateForPicker(today);
+                }
+            }
+            fetchSelectedHistoricalData();
+        });
+    }
 }
 
 // 3. WebSocket Real-time Tickers Integration
@@ -515,9 +539,11 @@ function connectWebSocket() {
                     updateStockCardUI(stock, msg.prices[stock]);
                 });
                 
-                // Add live point to chart if active stock ticked and granularity is 1s
+                // Add live point to chart if active stock ticked and granularity is 1s and no custom range is set
                 const activeGran = document.getElementById("chart-granularity").value;
-                if (activeGran === "second") {
+                const startVal = document.getElementById("chart-range-start").value;
+                const endVal = document.getElementById("chart-range-end").value;
+                if (activeGran === "second" && !startVal && !endVal) {
                     const tickTime = new Date(msg.time);
                     const formattedTime = formatTimeHHMMSS(tickTime);
                     const priceVal = msg.prices[state.activeStock];
@@ -1041,12 +1067,9 @@ function initializeChart() {
         }
     });
     
-    // Set initial date pickers boundaries
-    const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
-    
-    document.getElementById("chart-range-start").value = formatDateForPicker(startOfToday);
-    document.getElementById("chart-range-end").value = formatDateForPicker(today);
+    // Keep initial date pickers empty to load in live streaming mode by default
+    document.getElementById("chart-range-start").value = "";
+    document.getElementById("chart-range-end").value = "";
 }
 
 function fetchSelectedHistoricalData() {
