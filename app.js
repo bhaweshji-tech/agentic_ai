@@ -1121,7 +1121,7 @@ function fetchSelectedHistoricalData() {
             }
             
             displayTicks.forEach(t => {
-                const tickTime = new Date(t.created_at);
+                const tickTime = new Date(t.created_at.endsWith("Z") ? t.created_at : t.created_at + "Z");
                 const formatted = granularity === "second" ? formatDateTimeDDMMYYYYHHMMSS(tickTime) : formatDateTimeDDMMYYYYHHMM(tickTime);
                 state.chartData.labels.push(formatted);
                 state.chartData.prices.push(t.price);
