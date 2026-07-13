@@ -545,7 +545,7 @@ function connectWebSocket() {
                 const endVal = document.getElementById("chart-range-end").value;
                 if (activeGran === "second" && !startVal && !endVal) {
                     const tickTime = new Date(msg.time);
-                    const formattedTime = formatTimeHHMMSS(tickTime);
+                    const formattedTime = formatDateTimeDDMMYYYYHHMMSS(tickTime);
                     const priceVal = msg.prices[state.activeStock];
                     
                     appendTickToChart(formattedTime, priceVal);
@@ -1033,13 +1033,7 @@ function initializeChart() {
                             return 'Price: Rs. ' + Number(context.raw).toFixed(2);
                         },
                         title: function(context) {
-                            // Trim date part if present and show hh:mm format
-                            const fullLabel = context[0].label;
-                            if (fullLabel.includes(" ")) {
-                                const parts = fullLabel.split(" ");
-                                return 'Time: ' + parts[1].substring(0, 5);
-                            }
-                            return 'Time: ' + fullLabel.substring(0, 5);
+                            return 'Date/Time: ' + context[0].label;
                         }
                     }
                 }
@@ -1050,7 +1044,27 @@ function initializeChart() {
                     ticks: {
                         color: '#64748b',
                         font: { family: 'Plus Jakarta Sans', size: 9 },
-                        maxTicksLimit: 12
+                        maxTicksLimit: 12,
+                        callback: function(val, index) {
+                            const label = this.getLabelForValue(val);
+                            if (label && label.includes("-")) {
+                                const parts = label.split(" ");
+                                if (parts.length >= 2) {
+                                    const dateStr = parts[0];
+                                    const timeStr = parts[1];
+                                    
+                                    // Check if date is today to optimize
+                                    const todayStr = formatDateDDMMYYYY(new Date());
+                                    if (dateStr === todayStr) {
+                                        return timeStr;
+                                    } else {
+                                        const dateParts = dateStr.split("-");
+                                        return `${dateParts[0]}-${dateParts[1]} ${timeStr}`;
+                                    }
+                                }
+                            }
+                            return label;
+                        }
                     }
                 },
                 y: {
@@ -1094,8 +1108,7 @@ function fetchSelectedHistoricalData() {
             
             ticks.forEach(t => {
                 const tickTime = new Date(t.created_at);
-                // Format: If granularity is 1s, show hh:mm:ss. If downsampled, show hh:mm
-                const formatted = granularity === "second" ? formatTimeHHMMSS(tickTime) : formatTimeHHMM(tickTime);
+                const formatted = granularity === "second" ? formatDateTimeDDMMYYYYHHMMSS(tickTime) : formatDateTimeDDMMYYYYHHMM(tickTime);
                 state.chartData.labels.push(formatted);
                 state.chartData.prices.push(t.price);
             });
@@ -1204,6 +1217,21 @@ function formatTimeHHMMSS(date) {
 function formatTimeHHMM(date) {
     const parts = date.toTimeString().split(' ')[0].split(':');
     return `${parts[0]}:${parts[1]}`;
+}
+
+function formatDateTimeDDMMYYYYHHMMSS(date) {
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function formatDateTimeDDMMYYYYHHMM(date) {
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatDateDDMMYYYY(date) {
+    const pad = (num) => String(num).padStart(2, '0');
+    return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
 }
 
 function formatDateForPicker(date) {
