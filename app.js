@@ -70,6 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function initApp() {
     setupEventListeners();
     initCountdownTimer();
+    updateDatePickerLimits();
     
     // Check if we have a Supabase session first
     if (supabaseClient) {
@@ -500,6 +501,7 @@ function setupEventListeners() {
                     endPicker.value = formatDateForPicker(today);
                 }
             }
+            updateDatePickerLimits();
             fetchSelectedHistoricalData();
         });
     }
@@ -1094,10 +1096,10 @@ function fetchSelectedHistoricalData() {
     
     let url = `${API_BASE}/api/stocks/history?stock_name=${stock}&granularity=${granularity}`;
     if (start) {
-        url += `&start_time=${new Date(start).toISOString()}`;
+        url += `&start_time=${new Date(start + "Z").toISOString()}`;
     }
     if (end) {
-        url += `&end_time=${new Date(end).toISOString()}`;
+        url += `&end_time=${new Date(end + "Z").toISOString()}`;
     }
     
     fetch(url)
@@ -1106,7 +1108,14 @@ function fetchSelectedHistoricalData() {
             state.chartData.labels = [];
             state.chartData.prices = [];
             
-            ticks.forEach(t => {
+            // Slice last 60 ticks if in live mode to keep chart responsively drawing
+            let displayTicks = ticks;
+            const isLive = (granularity === "second" && !start && !end);
+            if (isLive) {
+                displayTicks = ticks.slice(-60);
+            }
+            
+            displayTicks.forEach(t => {
                 const tickTime = new Date(t.created_at);
                 const formatted = granularity === "second" ? formatDateTimeDDMMYYYYHHMMSS(tickTime) : formatDateTimeDDMMYYYYHHMM(tickTime);
                 state.chartData.labels.push(formatted);
@@ -1237,6 +1246,45 @@ function formatDateDDMMYYYY(date) {
 function formatDateForPicker(date) {
     const pad = (num) => String(num).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function updateDatePickerLimits() {
+    const granularity = document.getElementById("chart-granularity").value;
+    const startPicker = document.getElementById("chart-range-start");
+    const endPicker = document.getElementById("chart-range-end");
+    if (!startPicker || !endPicker) return;
+    
+    const now = new Date();
+    const nowStr = formatDateForPicker(now);
+    
+    let minStr = "2026-07-01T00:00";
+    let maxStr = nowStr;
+    
+    if (granularity === "second") {
+        // Last 1 hour only
+        const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+        minStr = formatDateForPicker(oneHourAgo);
+    } else if (granularity === "minute") {
+        // Last 6 hours only
+        const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        minStr = formatDateForPicker(sixHoursAgo);
+    } else if (granularity === "5minute") {
+        // From 1st July 2026
+        minStr = "2026-07-01T00:00";
+    }
+    
+    startPicker.min = minStr;
+    startPicker.max = maxStr;
+    endPicker.min = minStr;
+    endPicker.max = maxStr;
+    
+    // Clamp or clear invalid values
+    if (startPicker.value && (startPicker.value < minStr || startPicker.value > maxStr)) {
+        startPicker.value = "";
+    }
+    if (endPicker.value && (endPicker.value < minStr || endPicker.value > maxStr)) {
+        endPicker.value = "";
+    }
 }
 
 // System banner manager
